@@ -1,0 +1,172 @@
+# 🔧 Эксплуатация TLDW
+
+## Команды CLI `tldw`
+
+```bash
+tldw start      # запустить все контейнеры
+tldw stop       # остановить
+tldw restart    # перезапустить
+tldw rebuild    # пересобрать образы и запустить (после изменений кода)
+tldw logs       # все логи в реальном времени
+tldw logs web   # логи только веб
+tldw logs worker # логи только воркера
+tldw status     # статус контейнеров
+tldw web        # перезапустить только web
+tldw worker     # перезапустить только worker
+```
+
+## Просмотр очереди задач
+
+```bash
+sqlite3 ~/whisper-app/data/jobs.db \
+  "SELECT id, filename, status, datetime(created_at,'unixepoch') FROM jobs ORDER BY created_at DESC LIMIT 20;"
+```
+
+## Сброс зависших задач
+
+Зависшие задачи автоматически сбрасываются при перезапуске воркера. Вручную:
+
+```bash
+sqlite3 ~/whisper-app/data/jobs.db \
+  "UPDATE jobs SET status='error', error='Сброшено вручную' WHERE status NOT IN ('done','error');"
+```
+
+## Бэкапы
+
+> Бэкап **не обязателен**: проект разворачивается с нуля, а вся конфигурация (включая
+> логин/пароль) живёт в `.env`. Делайте бэкап только если хотите сохранить **историю
+> обработок** (`data/jobs.db`) — она не критична и при чистом деплое создаётся пустой.
+
+### Критические файлы
+
+```bash
+# Минимально достаточный бэкап — только конфигурация
+cp ~/whisper-app/.env ~/backup-env-$(date +%Y%m%d).env
+
+# Полный бэкап с историей обработок
+tar czf ~/tldw-backup-$(date +%Y%m%d).tar.gz \
+  -C ~ whisper-app/.env whisper-app/data/jobs.db
+```
+
+### Скачать на локальный компьютер
+
+```bash
+# С локальной машины
+scp deploy@SERVER_IP:~/tldw-backup-*.tar.gz ~/Downloads/
+```
+
+### Автоматический ежедневный бэкап
+
+```bash
+crontab -e
+```
+
+Добавьте:
+```
+0 3 * * * tar czf /home/$USER/backups/tldw-$(date +\%Y\%m\%d).tar.gz -C /home/$USER whisper-app/.env whisper-app/data/jobs.db && find /home/$USER/backups -mtime +30 -delete
+```
+
+Не забудьте создать `mkdir -p ~/backups`.
+
+## Мониторинг места на диске
+
+```bash
+# Общее использование
+df -h
+
+# Размер папки данных
+du -sh ~/whisper-app/data/
+
+# Размер Docker volumes (включая кэш Whisper)
+docker system df
+```
+
+## Очистка
+
+### Удалить старые задачи из истории (старше 30 дней)
+
+```bash
+sqlite3 ~/whisper-app/data/jobs.db \
+  "DELETE FROM jobs WHERE created_at < strftime('%s', 'now', '-30 days');"
+
+sqlite3 ~/whisper-app/data/jobs.db "VACUUM;"
+```
+
+### Зачистка Docker
+
+```bash
+# Удалить неиспользуемые образы и контейнеры
+docker system prune -a
+
+# ⚠️ Удалить volume с кэшем моделей (модели придётся скачивать заново)
+docker volume rm whisper-app_whisper_cache
+```
+
+## Обновление кода из репозитория
+
+```bash
+cd ~/whisper-app
+git pull
+docker compose up -d --build
+```
+
+⚠️ Локальный `.env` не затронется (он в `.gitignore`), логин/пароль сохранятся.
+
+## Калибровка RTF под ваш VPS
+
+После обработки нескольких видео посмотрите фактический RTF в логах:
+
+```bash
+tldw logs worker | grep "RTF="
+```
+
+Усредните значения и обновите в `.env`:
+
+```
+RTF=1.85  # вместо 2.0 если ваш сервер быстрее
+```
+
+Перезапустите воркер: `tldw worker`. Оценка времени в UI станет точнее.
+
+## Смена модели Whisper
+
+```bash
+nano ~/whisper-app/.env
+# изменить: WHISPER_MODEL=medium
+
+tldw worker
+```
+
+При первом запуске воркер скачает новую модель (несколько минут). Старая останется в кэше.
+
+| Модель | RAM | Качество | RTF (2-core) |
+|---|---|---|---|
+| tiny    | ~0.4 ГБ | низкое        | ~0.5 |
+| base    | ~0.7 ГБ | среднее       | ~0.8 |
+| small   | ~1.5 ГБ | хорошее       | ~2.0 |
+| medium  | ~3 ГБ   | очень хорошее | ~4.5 |
+| large-v3| ~6 ГБ   | лучшее        | ~8.0 |
+
+## Логи в Journalctl (systemd)
+
+```bash
+sudo journalctl -u tldw.service -f
+sudo journalctl -u tldw.service --since "1 hour ago"
+```
+
+## Перенос на новый VPS
+
+Переносить файлы со старого сервера не нужно — деплой выполняется с нуля:
+
+1. Удалить старый VPS
+2. Развернуть новый по [DEPLOY.md](DEPLOY.md):
+   ```bash
+   git clone https://github.com/losoph/tldw.git ~/whisper-app
+   cd ~/whisper-app
+   cp .env.example .env
+   nano .env            # вписать ключ DeepSeek; логин/пароль оставить прежними
+   docker compose up -d --build
+   ```
+
+История обработок начнётся заново (БД создастся пустой). Если нужно сохранить старую
+историю — заранее скопируйте `data/jobs.db` со старого сервера в `data/` нового.

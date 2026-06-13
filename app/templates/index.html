@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TLDW — Саммари</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Unbounded:wght@300;700&display=swap');
+  :root {
+    --bg: #0a0a0c; --surface: #111115; --border: #1e1e26;
+    --accent: #7c6af7; --accent2: #3de6b8; --text: #e8e8f0;
+    --muted: #55556a; --danger: #f75a5a;
+    --mono: 'JetBrains Mono', monospace; --display: 'Unbounded', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; min-height: 100vh; }
+  header { border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; align-items: baseline; gap: 14px; }
+  .logo { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: -1px; }
+  .tagline { color: var(--muted); font-size: 11px; }
+  .main { max-width: 860px; margin: 0 auto; padding: 36px 24px; }
+  .drop-zone { border: 1px dashed var(--border); border-radius: 6px; padding: 48px 32px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; background: var(--surface); }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); background: #12121a; }
+  .drop-zone input { display: none; }
+  .drop-zone .icon { font-size: 32px; margin-bottom: 14px; opacity: .4; }
+  .drop-zone .label { font-family: var(--display); font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+  .drop-zone .formats { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .fmt-tag { font-size: 10px; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); }
+  .fmt-tag.video { border-color: #2a2a3a; color: #7070a0; }
+  .fmt-tag.audio { border-color: #1a2a2a; color: #40a090; }
+  .drop-zone .hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  .upload-progress { margin-top: 16px; display: none; }
+  .progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .1s; }
+  .progress-label { color: var(--muted); font-size: 11px; margin-top: 8px; text-align: center; }
+  .job-card { margin-top: 24px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+  .job-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .job-filename { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .status-badge { font-size: 10px; padding: 3px 10px; border-radius: 20px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+  .status-pending { background: #1e1e10; color: #c4b84a; border: 1px solid #3a3820; }
+  .status-extracting_audio { background: #0e1a2a; color: #4ab0c4; border: 1px solid #1a3045; }
+  .status-transcribing { background: #1a0e2a; color: #a87af5; border: 1px solid #32215a; }
+  .status-summarizing { background: #0e2a1a; color: #4ac49a; border: 1px solid #1a4530; }
+  .status-done { background: #0e2a0e; color: #4ac44a; border: 1px solid #1a501a; }
+  .status-error { background: #2a0e0e; color: var(--danger); border: 1px solid #501a1a; }
+  .pipeline { display: flex; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .pipe-step { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .pipe-step.active { color: var(--accent2); }
+  .pipe-step.done { color: var(--accent); }
+  .pipe-sep { color: var(--border); margin: 0 8px; }
+  .job-body { padding: 20px; }
+  .section-title { font-family: var(--display); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
+  .summary-box { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 20px; max-height: 520px; overflow-y: auto; line-height: 1.8; font-size: 12.5px; color: #d0d0e0; white-space: pre-wrap; word-break: break-word; }
+  .summary-box::-webkit-scrollbar { width: 4px; }
+  .summary-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .actions-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .copy-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 5px 14px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: 11px; transition: color .15s, border-color .15s; }
+  .copy-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+  .waiting-block { color: var(--muted); text-align: center; padding: 28px; }
+  .history-title { font-family: var(--display); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin: 36px 0 12px; }
+  .history-list { display: flex; flex-direction: column; gap: 5px; }
+  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; transition: border-color .15s; gap: 10px; }
+  .history-item:hover { border-color: #2e2e3e; }
+  .history-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); min-width: 0; flex: 1; }
+  .history-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .htime { color: var(--muted); font-size: 11px; }
+  .del-btn { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; line-height: 1; transition: color .15s, border-color .15s; font-family: var(--mono); }
+  .del-btn:hover { color: var(--danger); border-color: var(--danger); }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--muted); border-top-color: var(--accent2); border-radius: 50%; animation: spin .6s linear infinite; margin-right: 6px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { color: var(--danger); font-size: 12px; padding: 16px 20px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TLDW</div>
+  <div class="tagline">саммари ваших аудио и видеофайлов</div>
+</header>
+<div class="main">
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".mp4,.webm,.avi,.mov,.mkv,.m4v,.mp3,.wav,.ogg,.m4a,.flac,.aac,.opus,.wma">
+    <div class="icon">◈</div>
+    <div class="label">Перетащите файл или нажмите для выбора</div>
+    <div class="formats">
+      <span class="fmt-tag video">mp4</span><span class="fmt-tag video">mkv</span>
+      <span class="fmt-tag video">avi</span><span class="fmt-tag video">mov</span>
+      <span class="fmt-tag video">webm</span><span class="fmt-tag audio">mp3</span>
+      <span class="fmt-tag audio">m4a</span><span class="fmt-tag audio">wav</span>
+      <span class="fmt-tag audio">ogg</span><span class="fmt-tag audio">flac</span>
+      <span class="fmt-tag audio">aac</span><span class="fmt-tag audio">opus</span>
+    </div>
+    <div class="hint">до 2 ГБ · обрабатывается на сервере, данные не передаются третьим лицам</div>
+  </div>
+  <div class="upload-progress" id="uploadProgress">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">Загрузка...</div>
+  </div>
+  <div id="jobCard"></div>
+  <div class="history-title" id="historyTitle" style="display:none">История обработок</div>
+  <div class="history-list" id="historyList"></div>
+</div>
+<script>
+const STEPS = {
+  pending: ['pending','—','—','—'], extracting_audio: ['done','active','—','—'],
+  transcribing: ['done','done','active','—'], summarizing: ['done','done','done','active'],
+  done: ['done','done','done','done'], error: ['done','—','—','—'],
+};
+const STEP_LABELS = ['Загрузка','FFmpeg','Whisper','DeepSeek'];
+const STATUS_RU = {
+  pending: 'В очереди', extracting_audio: 'Аудио',
+  transcribing: 'Транскрибация', summarizing: 'Саммаризация',
+  done: 'Готово', error: 'Ошибка',
+};
+let pollTimer = null;
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('click', () => fi.click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
+fi.addEventListener('change', () => { if (fi.files[0]) uploadFile(fi.files[0]); });
+function uploadFile(file) {
+  const up = document.getElementById('uploadProgress');
+  const fill = document.getElementById('progressFill');
+  const label = document.getElementById('progressLabel');
+  up.style.display = 'block';
+  document.getElementById('jobCard').innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  const xhr = new XMLHttpRequest();
+  xhr.upload.addEventListener('progress', e => {
+    if (e.lengthComputable) {
+      const pct = Math.round(e.loaded / e.total * 100);
+      fill.style.width = pct + '%';
+      label.textContent = 'Загрузка: ' + pct + '% · ' + (e.loaded/1024/1024).toFixed(1) + ' МБ из ' + (e.total/1024/1024).toFixed(1) + ' МБ';
+    }
+  });
+  xhr.addEventListener('load', () => {
+    up.style.display = 'none'; fill.style.width = '0%';
+    if (xhr.status === 200) { const data = JSON.parse(xhr.responseText); startPolling(data.job_id, file.name); }
+    else { try { const err = JSON.parse(xhr.responseText); alert('Ошибка: ' + (err.detail || xhr.responseText)); } catch { alert('Ошибка загрузки: ' + xhr.status); } }
+  });
+  xhr.open('POST', '/upload');
+  xhr.send(fd);
+}
+function startPolling(jobId, filename) {
+  if (pollTimer) clearInterval(pollTimer);
+  renderCard({ job_id: jobId, filename, status: 'pending' });
+  pollTimer = setInterval(() => pollStatus(jobId), 1500);
+}
+async function pollStatus(jobId) {
+  try {
+    const r = await fetch('/status/' + jobId);
+    const d = await r.json();
+    renderCard(d);
+    if (d.status === 'done' || d.status === 'error') { clearInterval(pollTimer); loadHistory(); }
+  } catch(e) {}
+}
+function fmtT(s) {
+  if (s < 60) return s + ' сек';
+  const m = Math.floor(s/60);
+  const sec = s % 60;
+  return sec > 0 ? m + ' мин ' + sec + ' сек' : m + ' мин';
+}
+function renderCard(d) {
+  const steps = STEPS[d.status] || ['—','—','—','—'];
+  const pipeline = STEP_LABELS.map((lbl, i) => {
+    const cls = steps[i] === 'active' ? 'active' : steps[i] === 'done' ? 'done' : '';
+    const icon = steps[i] === 'done' ? '✓' : steps[i] === 'active' ? '◉' : '○';
+    return '<span class="pipe-step ' + cls + '">' + icon + ' ' + lbl + '</span>' + (i < 3 ? '<span class="pipe-sep">──</span>' : '');
+  }).join('');
+  const isActive = !['done','error'].includes(d.status);
+  let body = '';
+  if (d.status === 'error') {
+    body = '<div class="error-msg">⚠ ' + escHtml(d.error || 'Неизвестная ошибка') + '</div>';
+  } else if (d.status === 'done' && d.summary) {
+    body = '<div class="job-body"><div class="section-title">Саммари</div>'
+      + '<div class="actions-row"><button class="copy-btn" onclick="copyText(\'sum-' + d.job_id + '\')">скопировать</button></div>'
+      + '<div class="summary-box" id="sum-' + d.job_id + '">' + escHtml(d.summary) + '</div></div>';
+  } else {
+    let timeInfo = '';
+    if (d.started_at && d.estimated_seconds) {
+      const elapsed = Math.max(0, Math.floor(Date.now()/1000 - d.started_at));
+      const total = d.estimated_seconds;
+      const remaining = Math.max(0, total - elapsed);
+      const pct = Math.min(99, Math.floor(elapsed / total * 100));
+      timeInfo = '<div style="margin-top:14px;color:var(--muted);font-size:11px;">'
+        + 'Прошло: ' + fmtT(elapsed) + ' · осталось ~' + fmtT(remaining)
+        + ' <span style="color:var(--accent2)">(' + pct + '%)</span>'
+        + (d.audio_duration ? '<br>Длительность: ' + fmtT(Math.round(d.audio_duration)) : '')
+        + '</div>';
+    }
+    body = '<div class="waiting-block">' + (isActive ? '<span class="spinner"></span>' : '')
+      + (STATUS_RU[d.status] || d.status) + '...' + timeInfo + '</div>';
+  }
+  document.getElementById('jobCard').innerHTML = '<div class="job-card"><div class="job-header"><span class="job-filename">' + escHtml(d.filename || d.job_id) + '</span><span class="status-badge status-' + d.status + '">' + (STATUS_RU[d.status] || d.status) + '</span></div><div class="pipeline">' + pipeline + '</div>' + body + '</div>';
+}
+function copyText(id) {
+  const el = document.getElementById(id);
+  if (el) navigator.clipboard.writeText(el.textContent).then(() => alert('Скопировано'));
+}
+function escHtml(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function deleteJob(id) {
+  if (!confirm('Удалить задачу?')) return;
+  await fetch('/jobs/' + id, { method: 'DELETE' });
+  loadHistory();
+}
+async function loadHistory() {
+  try {
+    const r = await fetch('/jobs');
+    const jobs = await r.json();
+    const ht = document.getElementById('historyTitle');
+    const hl = document.getElementById('historyList');
+    if (!jobs.length) { ht.style.display = 'none'; return; }
+    ht.style.display = '';
+    hl.innerHTML = jobs.map(j => {
+      const dt = new Date(j.created_at * 1000);
+      const timeStr = dt.toLocaleDateString('ru') + ', ' + dt.toLocaleTimeString('ru', {hour:'2-digit',minute:'2-digit'});
+      return '<div class="history-item" onclick="pollStatus(\'' + j.id + '\')"><span class="history-name">' + escHtml(j.filename) + '</span><div class="history-meta"><span class="status-badge status-' + j.status + '">' + (STATUS_RU[j.status]||j.status) + '</span><span class="htime">' + timeStr + '</span><button class="del-btn" onclick="event.stopPropagation();deleteJob(\'' + j.id + '\')" title="Удалить">✕</button></div></div>';
+    }).join('');
+  } catch(e) {}
+}
+loadHistory();
+</script>
+</body>
+</html>

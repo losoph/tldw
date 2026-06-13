@@ -1,0 +1,26 @@
+# Секреты — НИКОГДА не коммитить
+.env
+nginx/.htpasswd
+
+# Данные приложения (содержимое игнорируем, саму папку сохраняем через .gitkeep)
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code / local tooling
+.claude/

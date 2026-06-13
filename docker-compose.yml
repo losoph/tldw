@@ -1,0 +1,44 @@
+services:
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    # env_file (а не ${VAR}-подстановка) — чтобы пароли со спецсимволами
+    # вроде $ передавались в контейнер буквально. nginx использует только
+    # WEB_LOGIN/WEB_PASSWORD, остальные переменные игнорирует.
+    env_file: .env
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  web:
+    build: ./app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+    volumes:
+      - ./data:/data
+      - ./app/templates:/app/templates
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  worker:
+    build: ./app
+    command: python worker.py
+    volumes:
+      - ./data:/data
+      - whisper_cache:/root/.cache
+    env_file: .env
+    restart: unless-stopped
+    depends_on:
+      - web
+
+volumes:
+  whisper_cache:
