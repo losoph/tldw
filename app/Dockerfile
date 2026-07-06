@@ -1,10 +1,11 @@
 FROM python:3.11-slim
 
-# nodejs — JS-рантайм для yt-dlp (extraction YouTube требует исполнения JS;
-# deno с GitHub CDN недоступен с российского IP, ставим node из Debian-репы)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg nodejs \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+# JS-рантайм для YouTube (n-challenge) — deno-бинарник кладётся в volume
+# data/bin/deno и подключается воркером; node yt-dlp считает unsupported.
+# С GitHub CDN deno не качается с российского IP, поэтому не в образе (см. OPERATIONS.md).
 
 WORKDIR /app
 

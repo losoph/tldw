@@ -13,6 +13,7 @@ UPLOAD_DIR  = Path("/data/uploads")
 AUDIO_DIR   = Path("/data/audio")
 COOKIES_DIR = Path("/data/cookies")   # netscape-формат: <домен>.txt (например vk.com.txt)
 PROXIES_YML = Path("/data/proxies.yml")  # домен → URL прокси для yt-dlp
+DENO_BIN    = Path("/data/bin/deno")   # JS-рантайм для YouTube (n-challenge); кладётся в volume
 
 WHISPER_MODEL    = os.getenv("WHISPER_MODEL", "small")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -166,7 +167,6 @@ def download_url(job_id, url, clip_start, clip_end):
     host = (urlparse(url).hostname or "").lower()
     title_file = AUDIO_DIR / f"{job_id}.title"
     cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--no-progress",
-           "--js-runtimes", "node",  # в образе node, не deno (см. Dockerfile)
            "--socket-timeout", "30",
            "-o", str(UPLOAD_DIR / f"{job_id}.%(ext)s"),
            "--print-to-file", "%(title)s", str(title_file)]
@@ -174,6 +174,10 @@ def download_url(job_id, url, clip_start, clip_end):
     if proxy:
         cmd += ["--proxy", proxy]
         log.info(f"  yt-dlp: прокси для {host} из proxies.yml")
+    # YouTube требует JS-рантайм для n-challenge; node yt-dlp считает unsupported,
+    # поэтому deno-бинарник из volume (см. docs/OPERATIONS.md → JS-рантайм для YouTube)
+    if DENO_BIN.exists():
+        cmd += ["--js-runtimes", f"deno:{DENO_BIN}"]
     cookies = find_cookies(host)
     if cookies:
         cmd += ["--cookies", str(cookies)]
