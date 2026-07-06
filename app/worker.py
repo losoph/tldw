@@ -166,6 +166,7 @@ def download_url(job_id, url, clip_start, clip_end):
     host = (urlparse(url).hostname or "").lower()
     title_file = AUDIO_DIR / f"{job_id}.title"
     cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--no-progress",
+           "--js-runtimes", "node",  # в образе node, не deno (см. Dockerfile)
            "--socket-timeout", "30",
            "-o", str(UPLOAD_DIR / f"{job_id}.%(ext)s"),
            "--print-to-file", "%(title)s", str(title_file)]
