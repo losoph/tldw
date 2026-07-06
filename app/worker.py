@@ -14,6 +14,9 @@ WHISPER_MODEL    = os.getenv("WHISPER_MODEL", "small")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 LANGUAGE         = os.getenv("LANGUAGE", "ru")
 
+# Потоки CPU для faster-whisper: ставьте по числу ядер VPS (или чуть больше)
+CPU_THREADS = int(os.getenv("CPU_THREADS", "4"))
+
 # Real-Time Factor: сколько секунд обработки на 1 секунду аудио
 # Для small int8 + beam=2 + VAD на 2-core VPS: ~2.0
 RTF = float(os.getenv("RTF", "2.0"))
@@ -24,8 +27,8 @@ if not DEEPSEEK_API_KEY:
 # timeout=300: не даём запросу к DeepSeek зависнуть навсегда на длинных транскриптах
 client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com", timeout=300.0)
 
-log.info(f"Загрузка модели Whisper: {WHISPER_MODEL}...")
-whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=4, num_workers=1)
+log.info(f"Загрузка модели Whisper: {WHISPER_MODEL} (cpu_threads={CPU_THREADS})...")
+whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=CPU_THREADS, num_workers=1)
 log.info("Модель загружена. Воркер готов к работе.")
 
 SUMMARY_PROMPT = """Ты — профессиональный аналитик контента. Перед тобой транскрипция видео или вебинара на русском языке с таймкодами.
