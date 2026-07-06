@@ -6,6 +6,6 @@
 # поэтому обновление переживает рестарт; при rebuild ставится свежая версия из requirements.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-docker compose exec -T worker pip install -q --upgrade yt-dlp
+docker compose exec -T worker pip install -q --upgrade "yt-dlp[default]"
 docker compose restart worker
 echo "$(date '+%F %T') yt-dlp обновлён до $(docker compose exec -T worker yt-dlp --version)"

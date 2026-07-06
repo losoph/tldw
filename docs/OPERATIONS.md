@@ -117,19 +117,40 @@ docker compose up -d --build
 ### Обновление VK-cookies
 
 Для скачивания видео VK, требующих авторизации, воркер использует cookies корпоративного
-VK-аккаунта из `data/cookies/<домен>.txt` (netscape-формат). Если в UI появляется ошибка
-«нужна авторизация — cookies отсутствуют или протухли»:
+VK-аккаунта из `data/cookies/<домен>.txt` (netscape-формат).
 
-1. Войдите в VK под корпоративным аккаунтом в браузере
-2. Экспортируйте cookies расширением (например «Get cookies.txt LOCALLY») в netscape-формате
-3. Загрузите на сервер (файл покрывает и `vk.com`, и `vkvideo.ru` — можно скопировать):
+⚠️ **VK привязывает сессию к IP**: cookies, экспортированные из обычного браузера,
+с сервера не работают (проверено 2026-07-06 — VK отвечает «only available for registered
+users» и уводит в редирект-цикл). Логиниться в VK нужно **через IP сервера** — SSH-туннелем:
+
+1. Туннель и отдельный профиль Chrome через него:
+   ```bash
+   ssh -D 61080 -N aiqu-eb &
+   open -na "Google Chrome" --args --user-data-dir="$HOME/.tldw/vk-chrome-profile" \
+     --proxy-server="socks5://127.0.0.1:61080" --no-first-run https://vk.com
+   ```
+2. В открывшемся окне войдите в VK под корпоративным аккаунтом
+3. Экспортируйте cookies расширением («Get cookies.txt LOCALLY», netscape-формат)
+   либо `yt-dlp --cookies-from-browser "chrome:$HOME/.tldw/vk-chrome-profile" --cookies vk.txt ...`
+4. Загрузите на сервер (файл покрывает и `vk.com`, и `vkvideo.ru` — просто копия):
    ```bash
    scp cookies.txt aiqu-eb:~/whisper-app/data/cookies/vk.com.txt
-   ssh aiqu-eb "cp ~/whisper-app/data/cookies/vk.com.txt ~/whisper-app/data/cookies/vkvideo.ru.txt"
+   ssh aiqu-eb "cp ~/whisper-app/data/cookies/vk.com.txt ~/whisper-app/data/cookies/vkvideo.ru.txt && chmod 600 ~/whisper-app/data/cookies/*"
    ```
-4. Рестарт не нужен — cookies читаются на каждом скачивании
+5. Рестарт не нужен — cookies читаются на каждом скачивании
 
-Срок жизни VK-cookies неизвестен — определяется эмпирически, обновляйте по факту ошибки.
+Профиль `~/.tldw/vk-chrome-profile` сохраняйте — при протухании сессии достаточно снова
+открыть его через туннель и перелогиниться. Срок жизни VK-cookies неизвестен —
+обновляйте по факту ошибки в UI.
+
+Публичные VK-видео качаются **без cookies** — они нужны только для роликов с ограниченным доступом.
+
+### Cookies для YouTube
+
+Прокси-IP помечен у Google — YouTube отвечает «Sign in to confirm you're not a bot»
+и требует cookies. Используйте **отдельный/одноразовый Google-аккаунт** (не корпоративный
+и не личный — аккаунт может быть заблокирован за автоматизацию): залогиньтесь в браузере
+через тот же прокси, экспортируйте cookies в `data/cookies/youtube.com.txt`.
 
 ### Прокси для YouTube
 
