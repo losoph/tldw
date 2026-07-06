@@ -112,6 +112,44 @@ docker compose up -d --build
 
 ⚠️ Локальный `.env` не затронется (он в `.gitignore`), логин/пароль сохранятся.
 
+## Загрузка по ссылке (yt-dlp)
+
+### Обновление VK-cookies
+
+Для скачивания видео VK, требующих авторизации, воркер использует cookies корпоративного
+VK-аккаунта из `data/cookies/<домен>.txt` (netscape-формат). Если в UI появляется ошибка
+«нужна авторизация — cookies отсутствуют или протухли»:
+
+1. Войдите в VK под корпоративным аккаунтом в браузере
+2. Экспортируйте cookies расширением (например «Get cookies.txt LOCALLY») в netscape-формате
+3. Загрузите на сервер (файл покрывает и `vk.com`, и `vkvideo.ru` — можно скопировать):
+   ```bash
+   scp cookies.txt aiqu-eb:~/whisper-app/data/cookies/vk.com.txt
+   ssh aiqu-eb "cp ~/whisper-app/data/cookies/vk.com.txt ~/whisper-app/data/cookies/vkvideo.ru.txt"
+   ```
+4. Рестарт не нужен — cookies читаются на каждом скачивании
+
+Срок жизни VK-cookies неизвестен — определяется эмпирически, обновляйте по факту ошибки.
+
+### Прокси для YouTube
+
+YouTube с российского IP работает нестабильно. Прокси задаются per-domain в
+`data/proxies.yml` (образец — `proxies.yml.example` в корне репозитория). VK качается
+напрямую. Файл читается на каждом скачивании, рестарт не нужен.
+
+### Автообновление yt-dlp
+
+VK/YouTube регулярно ломают старые версии yt-dlp. Настройте cron (раз в 2 недели):
+
+```bash
+crontab -e
+# добавить:
+0 5 1,15 * * /root/whisper-app/scripts/update-ytdlp.sh >> /var/log/tldw-ytdlp.log 2>&1
+```
+
+Скрипт обновляет yt-dlp внутри контейнера воркера и перезапускает его. При `tldw rebuild`
+ставится свежая версия из requirements (yt-dlp там намеренно не запинен).
+
 ## Калибровка RTF под ваш VPS
 
 После обработки нескольких видео посмотрите фактический RTF в логах:

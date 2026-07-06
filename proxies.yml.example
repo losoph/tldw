@@ -1,0 +1,11 @@
+# Прокси для загрузки по ссылке (yt-dlp), per-domain.
+# Скопируйте на сервере в data/proxies.yml — воркер читает /data/proxies.yml.
+#
+# Формат: домен → URL прокси (http/https/socks5). Домен сверяется по суффиксу:
+# запись "youtube.com" покроет и www.youtube.com, и m.youtube.com.
+#
+# VK качается напрямую с российского IP — прокси для него не нужен.
+# YouTube с российского IP нестабилен — раскомментируйте и впишите свой прокси:
+#
+# youtube.com: "socks5://user:pass@1.2.3.4:1080"
+# youtu.be: "socks5://user:pass@1.2.3.4:1080"

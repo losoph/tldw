@@ -9,7 +9,7 @@
   :root {
     --bg: #0a0a0c; --surface: #111115; --border: #1e1e26;
     --accent: #7c6af7; --accent2: #3de6b8; --text: #e8e8f0;
-    --muted: #55556a; --danger: #f75a5a;
+    --muted: #55556a; --danger: #f75a5a; --warn: #c4b84a;
     --mono: 'JetBrains Mono', monospace; --display: 'Unbounded', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,6 +28,25 @@
   .fmt-tag.video { border-color: #2a2a3a; color: #7070a0; }
   .fmt-tag.audio { border-color: #1a2a2a; color: #40a090; }
   .drop-zone .hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  .url-row { display: flex; gap: 8px; margin-top: 12px; }
+  .url-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 10px 14px; outline: none; transition: border-color .15s; }
+  .url-input:focus { border-color: var(--accent); }
+  .url-input::placeholder { color: var(--muted); }
+  .url-btn { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 0 18px; border-radius: 6px; cursor: pointer; font-family: var(--mono); font-size: 12px; transition: background .15s, color .15s; white-space: nowrap; }
+  .url-btn:hover { background: var(--accent); color: #0a0a0c; }
+  .options { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 11px; color: var(--muted); }
+  .opt-group { display: flex; align-items: center; gap: 8px; }
+  .opt-name { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .chip { border: 1px solid var(--border); padding: 4px 12px; border-radius: 20px; cursor: pointer; color: var(--muted); transition: color .15s, border-color .15s; user-select: none; }
+  .chip input { display: none; }
+  .chip:has(input:checked) { color: var(--accent2); border-color: var(--accent2); }
+  .chip:hover { border-color: #2e2e3e; }
+  .tc-input { width: 76px; background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 8px; outline: none; text-align: center; }
+  .tc-input:focus { border-color: var(--accent); }
+  .tc-input::placeholder { color: #3a3a4a; }
+  .check-label { display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--muted); user-select: none; }
+  .check-label:has(input:checked) { color: var(--accent2); }
+  .check-label input { accent-color: var(--accent2); }
   .upload-progress { margin-top: 16px; display: none; }
   .progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .1s; }
@@ -37,6 +56,7 @@
   .job-filename { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .status-badge { font-size: 10px; padding: 3px 10px; border-radius: 20px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
   .status-pending { background: #1e1e10; color: #c4b84a; border: 1px solid #3a3820; }
+  .status-downloading { background: #0e1a2a; color: #4a90c4; border: 1px solid #1a3045; }
   .status-extracting_audio { background: #0e1a2a; color: #4ab0c4; border: 1px solid #1a3045; }
   .status-transcribing { background: #1a0e2a; color: #a87af5; border: 1px solid #32215a; }
   .status-summarizing { background: #0e2a1a; color: #4ac49a; border: 1px solid #1a4530; }
@@ -47,6 +67,9 @@
   .pipe-step.active { color: var(--accent2); }
   .pipe-step.done { color: var(--accent); }
   .pipe-sep { color: var(--border); margin: 0 8px; }
+  .precheck { padding: 10px 20px; font-size: 11px; line-height: 1.6; border-bottom: 1px solid var(--border); }
+  .precheck.yellow { color: var(--warn); background: #16150c; }
+  .precheck.red { color: var(--danger); background: #1a0d0d; }
   .job-body { padding: 20px; }
   .section-title { font-family: var(--display); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
   .summary-box { background: #0d0d10; border: 1px solid var(--border); border-radius: 4px; padding: 20px; max-height: 520px; overflow-y: auto; line-height: 1.8; font-size: 12.5px; color: #d0d0e0; white-space: pre-wrap; word-break: break-word; }
@@ -55,6 +78,10 @@
   .actions-row { display: flex; gap: 8px; margin-bottom: 12px; }
   .copy-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 5px 14px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: 11px; transition: color .15s, border-color .15s; }
   .copy-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+  details.transcript summary { font-family: var(--display); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; list-style: none; }
+  details.transcript summary::before { content: '▸ '; color: var(--accent); }
+  details.transcript[open] summary::before { content: '▾ '; }
+  details.transcript > div { margin-top: 12px; }
   .waiting-block { color: var(--muted); text-align: center; padding: 28px; }
   .history-title { font-family: var(--display); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin: 36px 0 12px; }
   .history-list { display: flex; flex-direction: column; gap: 5px; }
@@ -90,6 +117,25 @@
     </div>
     <div class="hint">до 2 ГБ · обрабатывается на сервере, данные не передаются третьим лицам</div>
   </div>
+  <div class="url-row">
+    <input type="url" class="url-input" id="urlInput" placeholder="или вставьте ссылку — VK Видео / YouTube">
+    <button class="url-btn" id="urlBtn">по ссылке →</button>
+  </div>
+  <div class="options">
+    <div class="opt-group">
+      <span class="opt-name">Саммари</span>
+      <label class="chip"><input type="radio" name="preset" value="full" checked>Полное</label>
+      <label class="chip"><input type="radio" name="preset" value="express">Экспресс</label>
+      <label class="chip"><input type="radio" name="preset" value="konspekt">Конспект</label>
+    </div>
+    <div class="opt-group">
+      <span class="opt-name">Фрагмент</span>
+      <input class="tc-input" id="clipStart" placeholder="с 0:00" title="Начало фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">
+      <span>—</span>
+      <input class="tc-input" id="clipEnd" placeholder="по конец" title="Конец фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">
+    </div>
+    <label class="check-label"><input type="checkbox" id="includeTranscript"> расшифровка в результате</label>
+  </div>
   <div class="upload-progress" id="uploadProgress">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-label" id="progressLabel">Загрузка...</div>
@@ -100,13 +146,14 @@
 </div>
 <script>
 const STEPS = {
-  pending: ['pending','—','—','—'], extracting_audio: ['done','active','—','—'],
+  pending: ['pending','—','—','—'], downloading: ['active','—','—','—'],
+  extracting_audio: ['done','active','—','—'],
   transcribing: ['done','done','active','—'], summarizing: ['done','done','done','active'],
   done: ['done','done','done','done'], error: ['done','—','—','—'],
 };
 const STEP_LABELS = ['Загрузка','FFmpeg','Whisper','DeepSeek'];
 const STATUS_RU = {
-  pending: 'В очереди', extracting_audio: 'Аудио',
+  pending: 'В очереди', downloading: 'Скачивание', extracting_audio: 'Аудио',
   transcribing: 'Транскрибация', summarizing: 'Саммаризация',
   done: 'Готово', error: 'Ошибка',
 };
@@ -118,14 +165,29 @@ dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dra
 dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
 dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
 fi.addEventListener('change', () => { if (fi.files[0]) uploadFile(fi.files[0]); });
+document.getElementById('urlBtn').addEventListener('click', uploadUrl);
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') uploadUrl(); });
+function getOptions() {
+  return {
+    preset: document.querySelector('input[name="preset"]:checked').value,
+    clip_start: document.getElementById('clipStart').value.trim() || null,
+    clip_end: document.getElementById('clipEnd').value.trim() || null,
+    include_transcript: document.getElementById('includeTranscript').checked,
+  };
+}
 function uploadFile(file) {
   const up = document.getElementById('uploadProgress');
   const fill = document.getElementById('progressFill');
   const label = document.getElementById('progressLabel');
   up.style.display = 'block';
   document.getElementById('jobCard').innerHTML = '';
+  const opts = getOptions();
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('preset', opts.preset);
+  fd.append('include_transcript', opts.include_transcript ? 'true' : 'false');
+  if (opts.clip_start) fd.append('clip_start', opts.clip_start);
+  if (opts.clip_end) fd.append('clip_end', opts.clip_end);
   const xhr = new XMLHttpRequest();
   xhr.upload.addEventListener('progress', e => {
     if (e.lengthComputable) {
@@ -141,6 +203,23 @@ function uploadFile(file) {
   });
   xhr.open('POST', '/upload');
   xhr.send(fd);
+}
+async function uploadUrl() {
+  const input = document.getElementById('urlInput');
+  const url = input.value.trim();
+  if (!url) return;
+  const body = Object.assign({ url }, getOptions());
+  try {
+    const r = await fetch('/upload_url', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) { alert('Ошибка: ' + (data.detail || r.status)); return; }
+    input.value = '';
+    document.getElementById('jobCard').innerHTML = '';
+    startPolling(data.job_id, url);
+  } catch(e) { alert('Ошибка запроса: ' + e); }
 }
 function startPolling(jobId, filename) {
   if (pollTimer) clearInterval(pollTimer);
@@ -161,6 +240,14 @@ function fmtT(s) {
   const sec = s % 60;
   return sec > 0 ? m + ' мин ' + sec + ' сек' : m + ' мин';
 }
+function precheckBanner(d) {
+  if (!d.precheck) return '';
+  try {
+    const p = JSON.parse(d.precheck);
+    if (p.level === 'green' || !p.messages || !p.messages.length) return '';
+    return '<div class="precheck ' + p.level + '">⚠ Качество записи: ' + p.messages.map(escHtml).join(' · ') + ' — распознавание может быть неточным</div>';
+  } catch(e) { return ''; }
+}
 function renderCard(d) {
   const steps = STEPS[d.status] || ['—','—','—','—'];
   const pipeline = STEP_LABELS.map((lbl, i) => {
@@ -176,6 +263,11 @@ function renderCard(d) {
     body = '<div class="job-body"><div class="section-title">Саммари</div>'
       + '<div class="actions-row"><button class="copy-btn" onclick="copyText(\'sum-' + d.job_id + '\')">скопировать</button></div>'
       + '<div class="summary-box" id="sum-' + d.job_id + '">' + escHtml(d.summary) + '</div></div>';
+    if (d.transcript) {
+      body += '<div class="job-body" style="padding-top:0"><details class="transcript"><summary>Расшифровка</summary><div>'
+        + '<div class="actions-row"><button class="copy-btn" onclick="copyText(\'tr-' + d.job_id + '\')">скопировать</button></div>'
+        + '<div class="summary-box" id="tr-' + d.job_id + '">' + escHtml(d.transcript) + '</div></div></details></div>';
+    }
   } else {
     let timeInfo = '';
     if (d.started_at && d.estimated_seconds) {
@@ -192,7 +284,7 @@ function renderCard(d) {
     body = '<div class="waiting-block">' + (isActive ? '<span class="spinner"></span>' : '')
       + (STATUS_RU[d.status] || d.status) + '...' + timeInfo + '</div>';
   }
-  document.getElementById('jobCard').innerHTML = '<div class="job-card"><div class="job-header"><span class="job-filename">' + escHtml(d.filename || d.job_id) + '</span><span class="status-badge status-' + d.status + '">' + (STATUS_RU[d.status] || d.status) + '</span></div><div class="pipeline">' + pipeline + '</div>' + body + '</div>';
+  document.getElementById('jobCard').innerHTML = '<div class="job-card"><div class="job-header"><span class="job-filename">' + escHtml(d.filename || d.job_id) + '</span><span class="status-badge status-' + d.status + '">' + (STATUS_RU[d.status] || d.status) + '</span></div><div class="pipeline">' + pipeline + '</div>' + precheckBanner(d) + body + '</div>';
 }
 function copyText(id) {
   const el = document.getElementById(id);
@@ -215,7 +307,8 @@ async function loadHistory() {
     hl.innerHTML = jobs.map(j => {
       const dt = new Date(j.created_at * 1000);
       const timeStr = dt.toLocaleDateString('ru') + ', ' + dt.toLocaleTimeString('ru', {hour:'2-digit',minute:'2-digit'});
-      return '<div class="history-item" onclick="pollStatus(\'' + j.id + '\')"><span class="history-name">' + escHtml(j.filename) + '</span><div class="history-meta"><span class="status-badge status-' + j.status + '">' + (STATUS_RU[j.status]||j.status) + '</span><span class="htime">' + timeStr + '</span><button class="del-btn" onclick="event.stopPropagation();deleteJob(\'' + j.id + '\')" title="Удалить">✕</button></div></div>';
+      const srcIcon = j.source_url ? '🔗 ' : '';
+      return '<div class="history-item" onclick="pollStatus(\'' + j.id + '\')"><span class="history-name">' + srcIcon + escHtml(j.filename) + '</span><div class="history-meta"><span class="status-badge status-' + j.status + '">' + (STATUS_RU[j.status]||j.status) + '</span><span class="htime">' + timeStr + '</span><button class="del-btn" onclick="event.stopPropagation();deleteJob(\'' + j.id + '\')" title="Удалить">✕</button></div></div>';
     }).join('');
   } catch(e) {}
 }

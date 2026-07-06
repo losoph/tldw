@@ -37,16 +37,18 @@
 
 ## Поток обработки
 
-1. **Загрузка** — пользователь выбирает файл, браузер отправляет multipart-POST на `/upload`
+1. **Загрузка** — файл (multipart-POST на `/upload`) или ссылка VK/YouTube (JSON на `/upload_url`); в обоих случаях передаются опции: пресет саммари, таймкоды фрагмента «с–по», галочка «расшифровка в результате»
 2. **Приём** — nginx буферизует и проксирует на FastAPI (`web`)
-3. **Сохранение** — `web` сохраняет файл в `/data/uploads/{uuid}.{ext}`, создаёт запись в SQLite со статусом `pending`
+3. **Сохранение** — `web` сохраняет файл в `/data/uploads/{uuid}.{ext}` (или только URL), создаёт запись в SQLite со статусом `pending`
 4. **Поллинг** — каждые 3 секунды `worker` смотрит в БД на задачи в статусе `pending`
-5. **FFmpeg** — извлечение аудио в WAV 16kHz mono → статус `extracting_audio`
-6. **ffprobe** — замер длительности, расчёт оценки времени
-7. **Whisper** — транскрибация локально → статус `transcribing`
-8. **DeepSeek** — отправка текста в API, получение структурированного саммари → статус `summarizing`
-9. **Завершение** — сохранение саммари в БД, удаление временных файлов → статус `done`
-10. **Отображение** — фронтенд поллит `/status/{id}` каждые 1.5 сек и обновляет UI
+5. **yt-dlp** (только для ссылок) — скачивание аудиодорожки → статус `downloading`; прокси per-domain из `data/proxies.yml`, cookies из `data/cookies/<домен>.txt`, фрагмент вырезается через `--download-sections`
+6. **FFmpeg** — извлечение аудио в WAV 16kHz mono → статус `extracting_audio`; фрагмент вырезается через `-ss`/`-to` (перед `-i`)
+7. **ffprobe** — замер длительности, расчёт оценки времени
+8. **Пре-чек качества (уровень 1)** — битрейт, средняя громкость, доля тишины (~секунды); результат сохраняется в `precheck`, 🟡/🔴 показываются баннером в UI, обработка не блокируется
+9. **Whisper** — транскрибация локально → статус `transcribing`; при обработке фрагмента таймкоды смещаются к исходнику
+10. **DeepSeek** — промпт собирается в бэкенде из секций пресета (Полное / Экспресс / Конспект), один вызов LLM → статус `summarizing`
+11. **Завершение** — сохранение саммари и транскрипта в БД, удаление временных файлов → статус `done`
+12. **Отображение** — фронтенд поллит `/status/{id}` каждые 1.5 сек и обновляет UI
 
 ## Структура данных
 
@@ -56,14 +58,19 @@
 |---|---|---|
 | `id` | TEXT PK | UUID задачи |
 | `filename` | TEXT | оригинальное имя файла |
-| `status` | TEXT | pending / extracting_audio / transcribing / summarizing / done / error |
+| `status` | TEXT | pending / downloading / extracting_audio / transcribing / summarizing / done / error |
 | `created_at` | REAL | unix timestamp создания |
 | `summary` | TEXT | финальное саммари от DeepSeek |
 | `error` | TEXT | сообщение об ошибке если status='error' |
 | `audio_duration` | REAL | длительность аудио в секундах |
 | `started_at` | REAL | unix timestamp начала обработки |
 | `estimated_seconds` | INTEGER | оценка времени = audio_duration × RTF |
-| `transcript` | TEXT | сырой транскрипт (не используется в UI) |
+| `transcript` | TEXT | транскрипт с таймкодами (сохраняется всегда; выдаётся в UI по галочке) |
+| `clip_start` / `clip_end` | REAL | границы фрагмента «с–по» в секундах (NULL = целиком) |
+| `source_url` | TEXT | исходная ссылка для задач «по ссылке» (NULL = загрузка файлом) |
+| `include_transcript` | INTEGER | 1 = показать расшифровку в результате |
+| `sections` | TEXT | JSON-список секций саммари (из пресета; шаблоны — в worker.py) |
+| `precheck` | TEXT | JSON результата пре-чека: level (green/yellow/red), messages, metrics |
 
 ### Файловая система (volume `data/`)
 
@@ -71,7 +78,9 @@
 data/
 ├── jobs.db           # SQLite база
 ├── uploads/          # временные исходные файлы (удаляются после обработки)
-└── audio/            # временные WAV для Whisper (удаляются после обработки)
+├── audio/            # временные WAV для Whisper (удаляются после обработки)
+├── cookies/          # netscape-cookies для yt-dlp: <домен>.txt (например vk.com.txt)
+└── proxies.yml       # прокси per-domain для yt-dlp (см. proxies.yml.example)
 ```
 
 ### Volume `whisper_cache`
