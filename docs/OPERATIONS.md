@@ -150,7 +150,27 @@ users» и уводит в редирект-цикл). Логиниться в V
 Прокси-IP помечен у Google — YouTube отвечает «Sign in to confirm you're not a bot»
 и требует cookies. Используйте **отдельный/одноразовый Google-аккаунт** (не корпоративный
 и не личный — аккаунт может быть заблокирован за автоматизацию): залогиньтесь в браузере
-через тот же прокси, экспортируйте cookies в `data/cookies/youtube.com.txt`.
+через **тот же прокси, что качает сервер** (IP должен совпадать), экспортируйте cookies в
+`data/cookies/youtube.com.txt` (продублируйте в `youtu.be.txt`).
+
+### JS-рантайм deno для YouTube
+
+YouTube-extraction требует исполнения JS (n-challenge). yt-dlp считает Node **unsupported**,
+годятся deno/bun/quickjs. Используется **deno-бинарник в volume**: `data/bin/deno`
+(linux x86_64), воркер подключает его через `--js-runtimes deno:/data/bin/deno` при наличии
+файла. Бинарник лежит в volume, а не в образе, потому что с GitHub CDN он не качается с
+российского IP. Переживает пересборки (`tldw rebuild`).
+
+Обновить deno (раз в несколько месяцев): скачать свежий
+`deno-x86_64-unknown-linux-gnu.zip` на машину с доступом к GitHub, распаковать, залить:
+```bash
+scp deno aiqu-eb:~/whisper-app/data/bin/deno
+ssh aiqu-eb "chmod +x ~/whisper-app/data/bin/deno"
+```
+⚠️ Если после scp `deno` даёт «Text file busy» — завис `sftp-server`, держащий файл:
+`ssh aiqu-eb "fuser -k ~/whisper-app/data/bin/deno"` и повторить.
+
+VK deno не нужен — там JS-челленджа нет.
 
 ### Прокси для YouTube
 

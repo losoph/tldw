@@ -80,6 +80,7 @@ data/
 ├── uploads/          # временные исходные файлы (удаляются после обработки)
 ├── audio/            # временные WAV для Whisper (удаляются после обработки)
 ├── cookies/          # netscape-cookies для yt-dlp: <домен>.txt (например vk.com.txt)
+├── bin/deno          # JS-рантайм для YouTube n-challenge (linux x86_64, вне образа)
 └── proxies.yml       # прокси per-domain для yt-dlp (см. proxies.yml.example)
 ```
 
