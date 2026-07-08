@@ -221,7 +221,11 @@ def download_url(job_id, url):
     # Каскад попыток: (метка, доп.аргументы, использовать_cookies)
     attempts = []
     if is_youtube:
-        for client in ("default", "android", "tv"):
+        # Порядок клиентов — от чаще проходящих без авторизации к остальным.
+        # tv/web_embedded/mweb исторически реже упираются в антибот без cookies;
+        # android/ios всё чаще требуют PO-token. Пул нужно держать в актуальном
+        # состоянии (см. docs/VIDEO_LINKS.md) — yt-dlp периодически меняет клиентов.
+        for client in ("default", "tv", "web_embedded", "mweb", "android", "ios"):
             ea = [] if client == "default" else ["--extractor-args", f"youtube:player_client={client}"]
             if cookies:
                 attempts.append((f"youtube/{client}+cookies", ea, True))
