@@ -47,6 +47,15 @@
   .check-label { display: flex; align-items: center; gap: 7px; cursor: pointer; color: var(--muted); user-select: none; }
   .check-label:has(input:checked) { color: var(--accent2); }
   .check-label input { accent-color: var(--accent2); }
+  .preset-hint { margin-top: 8px; padding: 9px 14px; border-left: 2px solid var(--accent); background: #101018; border-radius: 0 6px 6px 0; color: var(--muted); font-size: 11px; line-height: 1.6; opacity: 0; max-height: 0; overflow: hidden; transition: opacity .2s ease, max-height .2s ease, padding .2s ease; }
+  .preset-hint.show { opacity: 1; max-height: 80px; }
+  .preset-hint b { color: var(--accent2); font-weight: 600; }
+  .clips-list { display: flex; flex-direction: column; gap: 6px; }
+  .clip-row { display: flex; align-items: center; gap: 8px; }
+  .clip-add { background: transparent; border: 1px solid var(--border); color: var(--muted); width: 26px; height: 26px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: 15px; line-height: 1; transition: color .15s, border-color .15s; flex-shrink: 0; }
+  .clip-add:hover { color: var(--accent2); border-color: var(--accent2); }
+  .clip-del { background: transparent; border: 1px solid transparent; color: var(--muted); width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 13px; line-height: 1; transition: color .15s, border-color .15s; flex-shrink: 0; font-family: var(--mono); }
+  .clip-del:hover { color: var(--danger); border-color: var(--danger); }
   .upload-progress { margin-top: 16px; display: none; }
   .progress-bar { height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); width: 0%; transition: width .1s; }
@@ -128,14 +137,16 @@
       <label class="chip"><input type="radio" name="preset" value="express">Экспресс</label>
       <label class="chip"><input type="radio" name="preset" value="konspekt">Конспект</label>
     </div>
-    <div class="opt-group">
-      <span class="opt-name">Фрагмент</span>
-      <input class="tc-input" id="clipStart" placeholder="с 0:00" title="Начало фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">
-      <span>—</span>
-      <input class="tc-input" id="clipEnd" placeholder="по конец" title="Конец фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">
+    <div class="opt-group" style="align-items:flex-start">
+      <span class="opt-name" style="margin-top:8px">Фрагменты</span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="clips-list" id="clipsList"></div>
+        <div><button type="button" class="clip-add" id="addClip" title="Добавить ещё один фрагмент из этого видео">+</button></div>
+      </div>
     </div>
-    <label class="check-label"><input type="checkbox" id="includeTranscript"> расшифровка в результате</label>
+    <label class="check-label"><input type="checkbox" id="includeTranscript"> Включить полную стенограмму в саммари</label>
   </div>
+  <div class="preset-hint" id="presetHint"></div>
   <div class="upload-progress" id="uploadProgress">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-label" id="progressLabel">Загрузка...</div>
@@ -167,11 +178,50 @@ dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag
 fi.addEventListener('change', () => { if (fi.files[0]) uploadFile(fi.files[0]); });
 document.getElementById('urlBtn').addEventListener('click', uploadUrl);
 document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') uploadUrl(); });
+// ── Пояснения к режимам саммари (всплывают при выборе) ──
+const PRESET_HINTS = {
+  full: '<b>Полное</b> — все секции: суть, конспект по блокам с таймкодами, главные инсайты, action items, вопросы-ответы, глоссарий и навигация. Максимально подробный разбор.',
+  express: '<b>Экспресс</b> — только суть материала и action items. Быстрый обзор без деталей: для чего смотреть и что делать.',
+  konspekt: '<b>Конспект</b> — суть, конспект по логическим блокам и навигация по таймкодам. Структура материала без инсайтов и глоссария.',
+};
+function updatePresetHint() {
+  const preset = document.querySelector('input[name="preset"]:checked').value;
+  const hint = document.getElementById('presetHint');
+  hint.innerHTML = PRESET_HINTS[preset] || '';
+  hint.classList.toggle('show', !!PRESET_HINTS[preset]);
+}
+document.querySelectorAll('input[name="preset"]').forEach(r => r.addEventListener('change', updatePresetHint));
+
+// ── Фрагменты: несколько диапазонов «с–по» из одного видео ──
+function addClipRow(start = '', end = '') {
+  const list = document.getElementById('clipsList');
+  const row = document.createElement('div');
+  row.className = 'clip-row';
+  row.innerHTML =
+    '<input class="tc-input clip-start" placeholder="с 0:00" value="' + start + '" title="Начало фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">' +
+    '<span>—</span>' +
+    '<input class="tc-input clip-end" placeholder="по конец" value="' + end + '" title="Конец фрагмента: ЧЧ:ММ:СС, ММ:СС или секунды">' +
+    '<button type="button" class="clip-del" title="Убрать фрагмент">✕</button>';
+  row.querySelector('.clip-del').addEventListener('click', () => {
+    row.remove();
+    if (!list.children.length) addClipRow();  // всегда хотя бы одна строка
+  });
+  list.appendChild(row);
+}
+document.getElementById('addClip').addEventListener('click', () => addClipRow());
+function getClips() {
+  const clips = [];
+  document.querySelectorAll('#clipsList .clip-row').forEach(row => {
+    const s = row.querySelector('.clip-start').value.trim();
+    const e = row.querySelector('.clip-end').value.trim();
+    if (s || e) clips.push([s || null, e || null]);
+  });
+  return clips;
+}
 function getOptions() {
   return {
     preset: document.querySelector('input[name="preset"]:checked').value,
-    clip_start: document.getElementById('clipStart').value.trim() || null,
-    clip_end: document.getElementById('clipEnd').value.trim() || null,
+    clips: getClips(),
     include_transcript: document.getElementById('includeTranscript').checked,
   };
 }
@@ -186,8 +236,7 @@ function uploadFile(file) {
   fd.append('file', file);
   fd.append('preset', opts.preset);
   fd.append('include_transcript', opts.include_transcript ? 'true' : 'false');
-  if (opts.clip_start) fd.append('clip_start', opts.clip_start);
-  if (opts.clip_end) fd.append('clip_end', opts.clip_end);
+  fd.append('clips', JSON.stringify(opts.clips));
   const xhr = new XMLHttpRequest();
   xhr.upload.addEventListener('progress', e => {
     if (e.lengthComputable) {
@@ -264,7 +313,7 @@ function renderCard(d) {
       + '<div class="actions-row"><button class="copy-btn" onclick="copyText(\'sum-' + d.job_id + '\')">скопировать</button></div>'
       + '<div class="summary-box" id="sum-' + d.job_id + '">' + escHtml(d.summary) + '</div></div>';
     if (d.transcript) {
-      body += '<div class="job-body" style="padding-top:0"><details class="transcript"><summary>Расшифровка</summary><div>'
+      body += '<div class="job-body" style="padding-top:0"><details class="transcript"><summary>Полная стенограмма</summary><div>'
         + '<div class="actions-row"><button class="copy-btn" onclick="copyText(\'tr-' + d.job_id + '\')">скопировать</button></div>'
         + '<div class="summary-box" id="tr-' + d.job_id + '">' + escHtml(d.transcript) + '</div></div></details></div>';
     }
@@ -312,6 +361,8 @@ async function loadHistory() {
     }).join('');
   } catch(e) {}
 }
+addClipRow();
+updatePresetHint();
 loadHistory();
 </script>
 </body>
