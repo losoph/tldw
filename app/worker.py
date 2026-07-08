@@ -221,11 +221,12 @@ def download_url(job_id, url):
     # Каскад попыток: (метка, доп.аргументы, использовать_cookies)
     attempts = []
     if is_youtube:
-        # Порядок клиентов — от чаще проходящих без авторизации к остальным.
-        # tv/web_embedded/mweb исторически реже упираются в антибот без cookies;
-        # android/ios всё чаще требуют PO-token. Пул нужно держать в актуальном
-        # состоянии (см. docs/VIDEO_LINKS.md) — yt-dlp периодически меняет клиентов.
-        for client in ("default", "tv", "web_embedded", "mweb", "android", "ios"):
+        # По PO-Token-гайду yt-dlp клиенты tv/web_embedded/android_vr НЕ требуют
+        # PO-token — только они реально качаются без cookies и без внешнего провайдера
+        # токенов. mweb/android/ios/web требуют PO-token для GVS (без bgutil-провайдера
+        # упадут), поэтому в бесток-каскад их не включаем. Пул держать в актуальном
+        # состоянии — см. docs/VIDEO_LINKS.md.
+        for client in ("default", "tv", "web_embedded", "android_vr"):
             ea = [] if client == "default" else ["--extractor-args", f"youtube:player_client={client}"]
             if cookies:
                 attempts.append((f"youtube/{client}+cookies", ea, True))
