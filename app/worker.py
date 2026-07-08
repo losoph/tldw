@@ -240,6 +240,7 @@ def download_url(job_id, url):
         cmd = list(base) + extra
         if use_cookies and cookies:
             cmd += ["--cookies", str(cookies)]
+        cmd.append(url)   # сам URL — обязательно последним аргументом
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         except subprocess.TimeoutExpired:
