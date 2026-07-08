@@ -104,6 +104,21 @@ def set_status(job_id, status, **kwargs):
         conn.execute(q, vals)
         conn.commit()
 
+def cleanup_job_files(job_id):
+    """Удаляет ВСЕ временные файлы задачи из uploads/ и audio/ — исходники,
+    WAV-фрагменты, .title и недокачанные .part. Вызывается в finally, поэтому
+    место на диске освобождается и после ошибок, не только при успехе."""
+    removed = 0
+    for d in (UPLOAD_DIR, AUDIO_DIR):
+        for f in d.glob(f"{job_id}*"):
+            try:
+                f.unlink()
+                removed += 1
+            except Exception:
+                pass
+    if removed:
+        log.info(f"  Очистка: удалено временных файлов: {removed}")
+
 def get_audio_duration(audio_path):
     try:
         r = subprocess.run([
@@ -149,59 +164,94 @@ def find_cookies(host):
     return match_by_domain(host, files)
 
 def friendly_download_error(stderr, host):
-    tail = stderr.strip()[-300:]
-    low = stderr.lower()
+    tail = (stderr or "").strip()[-300:]
+    low = (stderr or "").lower()
     if any(p in low for p in ("login", "sign in", "logged-in", "authorization",
-                              "cookies", "403", "only available for registered")):
-        return (f"Не удалось скачать: похоже, нужна авторизация — cookies для {host} "
-                f"отсутствуют или протухли. Обновите файл data/cookies/{host}.txt "
-                f"(инструкция: docs/OPERATIONS.md → «Обновление VK-cookies»). Детали: {tail}")
+                              "cookies", "403", "only available for registered",
+                              "confirm you", "not a bot")):
+        return (f"Не удалось скачать даже как публичное видео. Если ролик приватный — нужны "
+                f"свежие cookies для {host} (data/cookies/{host}.txt, инструкция: "
+                f"docs/OPERATIONS.md → «Обновление VK-cookies»). Если публичный — вероятно, "
+                f"устарел yt-dlp или сработала антибот-защита. Детали: {tail}")
     if "unsupported url" in low:
         return f"Ссылка не поддерживается yt-dlp: {tail}"
-    if any(p in low for p in ("video unavailable", "private video", "removed")):
+    if any(p in low for p in ("video unavailable", "private video", "removed", "deleted")):
         return f"Видео недоступно (удалено или приватное): {tail}"
     return f"Ошибка скачивания: {tail}"
 
-def download_url(job_id, url, clip_start, clip_end):
-    """Скачивает только аудио через yt-dlp. Возвращает (path, title) или бросает RuntimeError."""
+def _read_title(title_file):
+    try:
+        title = title_file.read_text().strip().splitlines()[0]
+        title_file.unlink()
+        return title
+    except Exception:
+        return None
+
+def download_url(job_id, url):
+    """Скачивает только аудио (весь ролик) через yt-dlp с каскадом попыток.
+
+    Ключевая идея исправления доступа: НЕ полагаемся на один вариант. Пробуем по
+    очереди, пока какой-нибудь не сработает:
+      • с cookies (если есть) — для приватных роликов;
+      • БЕЗ cookies — публичные видео так качаются надёжнее, а протухшие/IP-привязанные
+        cookies публичную загрузку как раз ломают (VK/YouTube отвергают битую сессию);
+      • для YouTube — разные player_client (default/android/tv), это штатный обход
+        антибот-защиты «Sign in to confirm you're not a bot».
+
+    Возвращает (path, title) или бросает RuntimeError с понятным сообщением.
+    Фрагменты здесь НЕ вырезаются — клипы режутся локально ffmpeg'ом (см. process)."""
     host = (urlparse(url).hostname or "").lower()
+    is_youtube = any(host == h or host.endswith("." + h) for h in ("youtube.com", "youtu.be"))
     title_file = AUDIO_DIR / f"{job_id}.title"
-    cmd = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--no-progress",
-           "--socket-timeout", "30",
-           "-o", str(UPLOAD_DIR / f"{job_id}.%(ext)s"),
-           "--print-to-file", "%(title)s", str(title_file)]
+
+    base = ["yt-dlp", "-f", "bestaudio/best", "--no-playlist", "--no-progress",
+            "--socket-timeout", "30", "--retries", "3",
+            "-o", str(UPLOAD_DIR / f"{job_id}.%(ext)s"),
+            "--print-to-file", "%(title)s", str(title_file)]
     proxy = match_by_domain(host, load_proxies())
     if proxy:
-        cmd += ["--proxy", proxy]
+        base += ["--proxy", proxy]
         log.info(f"  yt-dlp: прокси для {host} из proxies.yml")
     # YouTube требует JS-рантайм для n-challenge; node yt-dlp считает unsupported,
     # поэтому deno-бинарник из volume (см. docs/OPERATIONS.md → JS-рантайм для YouTube)
     if DENO_BIN.exists():
-        cmd += ["--js-runtimes", f"deno:{DENO_BIN}"]
+        base += ["--js-runtimes", f"deno:{DENO_BIN}"]
     cookies = find_cookies(host)
-    if cookies:
-        cmd += ["--cookies", str(cookies)]
-        log.info(f"  yt-dlp: cookies {cookies.name}")
-    if clip_start is not None or clip_end is not None:
-        section = f"*{int(clip_start or 0)}-{int(clip_end) if clip_end else 'inf'}"
-        cmd += ["--download-sections", section]
-    cmd.append(url)
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Скачивание не уложилось в 60 минут — прервано")
-    if r.returncode != 0:
-        raise RuntimeError(friendly_download_error(r.stderr, host))
-    path = next((f for f in UPLOAD_DIR.iterdir() if f.stem == job_id), None)
-    if not path:
-        raise RuntimeError("yt-dlp завершился успешно, но файл не найден")
-    title = None
-    try:
-        title = title_file.read_text().strip().splitlines()[0]
-        title_file.unlink()
-    except Exception:
-        pass
-    return path, title
+
+    # Каскад попыток: (метка, доп.аргументы, использовать_cookies)
+    attempts = []
+    if is_youtube:
+        for client in ("default", "android", "tv"):
+            ea = [] if client == "default" else ["--extractor-args", f"youtube:player_client={client}"]
+            if cookies:
+                attempts.append((f"youtube/{client}+cookies", ea, True))
+            attempts.append((f"youtube/{client}", ea, False))
+    else:
+        if cookies:
+            attempts.append(("vk+cookies", [], True))
+        attempts.append(("vk-public", [], False))
+
+    last_stderr = ""
+    for label, extra, use_cookies in attempts:
+        # Подчищаем хвосты предыдущей неудачной попытки, чтобы не спутать файлы
+        for f in UPLOAD_DIR.glob(f"{job_id}*"):
+            try: f.unlink()
+            except Exception: pass
+        cmd = list(base) + extra
+        if use_cookies and cookies:
+            cmd += ["--cookies", str(cookies)]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Скачивание не уложилось в 60 минут — прервано")
+        if r.returncode == 0:
+            path = next((f for f in UPLOAD_DIR.iterdir() if f.stem == job_id), None)
+            if path:
+                log.info(f"  yt-dlp: успех ({label})")
+                return path, _read_title(title_file)
+        last_stderr = r.stderr or last_stderr
+        log.info(f"  yt-dlp: попытка «{label}» не удалась, пробуем дальше")
+    raise RuntimeError(friendly_download_error(last_stderr, host))
 
 # ── Пре-чек качества (уровень 1) ────────────────────────────────────────────
 # ffprobe: битрейт исходника; ffmpeg: средняя громкость + доля тишины.
@@ -264,77 +314,112 @@ def run_precheck(source_path, wav_path, duration):
 
 # ── Основной пайплайн ───────────────────────────────────────────────────────
 
+def get_clips(job):
+    """Список фрагментов [[cs, ce], ...] из поля clips; при отсутствии —
+    из legacy-полей clip_start/clip_end; пусто → [[None, None]] (весь ролик)."""
+    try:
+        clips = json.loads(job["clips"]) if job["clips"] else []
+    except (TypeError, ValueError):
+        clips = []
+    if not clips:
+        cs, ce = job["clip_start"], job["clip_end"]
+        clips = [[cs, ce]] if (cs is not None or ce is not None) else [[None, None]]
+    return clips
+
+def extract_segment(src, cs, ce, out_path):
+    """Извлекает WAV 16кГц mono для одного фрагмента. -ss/-to перед -i —
+    быстрый seek без декодирования всего файла."""
+    args = ["ffmpeg"]
+    if cs is not None:
+        args += ["-ss", str(cs)]
+    if ce is not None:
+        args += ["-to", str(ce)]
+    args += ["-i", str(src), "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+             str(out_path), "-y"]
+    return subprocess.run(args, capture_output=True, text=True)
+
+def transcribe_segment(wav_path, offset):
+    """Транскрибирует один WAV, смещая таймкоды к исходному таймлайну (offset)."""
+    segments, _ = whisper.transcribe(
+        str(wav_path),
+        language=LANGUAGE,
+        beam_size=2,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
+        condition_on_previous_text=False,
+        initial_prompt="Транскрипция вебинара на русском языке."
+    )
+    return [f"[{fmt_ts(seg.start + offset)}] {seg.text.strip()}" for seg in segments]
+
 def process(job):
     job_id, filename = job["id"], job["filename"]
-    clip_start, clip_end = job["clip_start"], job["clip_end"]
     log.info(f"Обработка {job_id} ({filename})")
+    try:
+        _process(job)
+    finally:
+        # Освобождаем диск/ОЗУ в любом случае — и при успехе, и при ошибке
+        cleanup_job_files(job_id)
+
+def _process(job):
+    job_id, filename = job["id"], job["filename"]
+    clips = get_clips(job)
+    log.info(f"  Фрагментов: {len(clips)}" if clips != [[None, None]] else "  Обработка целиком")
 
     if job["source_url"]:
         set_status(job_id, "downloading")
         try:
-            upload_file, title = download_url(job_id, job["source_url"], clip_start, clip_end)
+            upload_file, title = download_url(job_id, job["source_url"])
         except RuntimeError as e:
             set_status(job_id, "error", error=str(e))
             return
         if title:
             set_status(job_id, "downloading", filename=title)
         log.info(f"  Скачано: {upload_file.name} ({title or 'без названия'})")
-        # клип уже вырезан на этапе скачивания (--download-sections)
-        ffmpeg_clip = []
     else:
         upload_file = next((f for f in UPLOAD_DIR.iterdir() if f.stem == job_id), None)
         if not upload_file:
             set_status(job_id, "error", error="Файл загрузки не найден")
             return
-        # -ss/-to перед -i: быстрый seek без декодирования всего файла
-        ffmpeg_clip = []
-        if clip_start is not None:
-            ffmpeg_clip += ["-ss", str(clip_start)]
-        if clip_end is not None:
-            ffmpeg_clip += ["-to", str(clip_end)]
 
+    # Извлекаем каждый фрагмент в отдельный WAV
     set_status(job_id, "extracting_audio")
-    audio_path = AUDIO_DIR / f"{job_id}.wav"
-    r = subprocess.run(
-        ["ffmpeg"] + ffmpeg_clip + [
-            "-i", str(upload_file),
-            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-            str(audio_path), "-y"
-        ], capture_output=True, text=True)
-    if r.returncode != 0:
-        set_status(job_id, "error", error=f"FFmpeg: {r.stderr[-400:]}")
-        return
+    segments = []  # (wav_path, offset, cs, ce, duration)
+    for i, (cs, ce) in enumerate(clips):
+        wav_path = AUDIO_DIR / f"{job_id}_{i}.wav"
+        r = extract_segment(upload_file, cs, ce, wav_path)
+        if r.returncode != 0:
+            set_status(job_id, "error", error=f"FFmpeg: {r.stderr[-400:]}")
+            return
+        dur = get_audio_duration(wav_path)
+        segments.append((wav_path, cs or 0.0, cs, ce, dur))
 
-    duration = get_audio_duration(audio_path)
-    precheck = run_precheck(upload_file, audio_path, duration)
-    estimated = int(duration * RTF)
+    total_duration = sum(s[4] for s in segments)
+    # Пре-чек на первом фрагменте (advisory; битрейт берётся из исходника)
+    precheck = run_precheck(upload_file, segments[0][0], segments[0][4])
+    estimated = int(total_duration * RTF)
     started = time.time()
-    log.info(f"  Аудио: {fmt_min(duration)} · оценка обработки: ~{fmt_min(estimated)}")
+    log.info(f"  Аудио: {fmt_min(total_duration)} · оценка обработки: ~{fmt_min(estimated)}")
 
     set_status(job_id, "transcribing",
-               audio_duration=duration,
+               audio_duration=total_duration,
                started_at=started,
                estimated_seconds=estimated,
                precheck=precheck)
 
-    # Таймкоды в транскрипте смещаем к исходнику, если обрабатывается фрагмент
-    offset = clip_start or 0.0
+    multi = len(segments) > 1
     try:
-        segments, _ = whisper.transcribe(
-            str(audio_path),
-            language=LANGUAGE,
-            beam_size=2,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=500),
-            condition_on_previous_text=False,
-            initial_prompt="Транскрипция вебинара на русском языке."
-        )
-        lines = [f"[{fmt_ts(seg.start + offset)}] {seg.text.strip()}" for seg in segments]
-        transcript = "\n".join(lines)
+        parts = []
+        for wav_path, offset, cs, ce, dur in segments:
+            lines = transcribe_segment(wav_path, offset)
+            if multi:
+                span = fmt_ts(cs or 0) + ("–" + fmt_ts(ce) if ce is not None else "–конец")
+                parts.append(f"═══ Фрагмент {span} ═══\n" + "\n".join(lines))
+            else:
+                parts.append("\n".join(lines))
+        transcript = "\n\n".join(parts)
         actual = time.time() - started
-        actual_rtf = actual / duration if duration else 0
-        log.info(f"  Транскрипция готова: {len(lines)} сегментов · "
-                 f"факт {fmt_min(actual)} (RTF={actual_rtf:.2f}x)")
+        actual_rtf = actual / total_duration if total_duration else 0
+        log.info(f"  Транскрипция готова · факт {fmt_min(actual)} (RTF={actual_rtf:.2f}x)")
     except Exception as e:
         set_status(job_id, "error", error=f"Whisper: {e}")
         return
@@ -354,9 +439,6 @@ def process(job):
         return
 
     set_status(job_id, "done", summary=summary)
-    for p in [upload_file, audio_path]:
-        try: p.unlink()
-        except Exception: pass
     total = time.time() - started
     log.info(f"Задача {job_id} завершена за {fmt_min(total)}")
 
@@ -367,7 +449,7 @@ def main():
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
-                "SELECT id, filename, source_url, clip_start, clip_end, sections "
+                "SELECT id, filename, source_url, clip_start, clip_end, clips, sections "
                 "FROM jobs WHERE status='pending' ORDER BY created_at LIMIT 1"
             ).fetchone()
         if row:

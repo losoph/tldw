@@ -1,3 +1,11 @@
+# Ротация docker-логов: без лимита json-file-логи растут бесконечно и
+# забивают диск. 10 МБ × 3 файла на сервис — потолок ~30 МБ на контейнер.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   nginx:
@@ -7,12 +15,13 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     # env_file (а не ${VAR}-подстановка) — чтобы пароли со спецсимволами
-    # вроде $ передавались в контейнер буквально. nginx использует только
-    # WEB_LOGIN/WEB_PASSWORD, остальные переменные игнорирует.
+    # вроде $ передавались в контейнер буквально. nginx использует
+    # WEB_LOGIN/WEB_PASSWORD и TLDW1..4_PASSWORD, остальные переменные игнорирует.
     env_file: .env
     depends_on:
       - web
     restart: unless-stopped
+    logging: *default-logging
 
   web:
     build: ./app
@@ -22,6 +31,7 @@ services:
       - ./app/templates:/app/templates
     env_file: .env
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -37,6 +47,7 @@ services:
       - whisper_cache:/root/.cache
     env_file: .env
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - web
 
